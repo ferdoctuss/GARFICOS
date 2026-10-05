@@ -43,6 +43,7 @@
             color: #2980b9;
             font-weight: bold;
             margin-top: 20px;
+            text-align: center;
         }
     </style>
 </head>
@@ -64,27 +65,35 @@
 
         async function cargarDatosYCrearGrafico() {
             try {
-                const response = await fetch(urlAPI);
+                // Usamos mode: 'cors' explícitamente
+                const response = await fetch(urlAPI, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const data = await response.json();
 
-                // Ocultamos el mensaje de carga una vez obtenidos los datos
+                // Ocultamos el mensaje de carga
                 document.getElementById('loadingMessage').style.display = 'none';
 
-                // Verificamos que lleguen datos
                 if (!data || data.length === 0) {
-                    alert("No se encontraron registros en la hoja de cálculo.");
+                    document.getElementById('loadingMessage').innerText = "La hoja de cálculo está vacía o no tiene registros.";
+                    document.getElementById('loadingMessage').style.display = 'block';
                     return;
                 }
 
-                // NOTA: Asegúrate de que las columnas en tu Google Sheet se llamen exactamente "Fecha" y "Cantidad"
-                // (puedes cambiar los nombres aquí si en tu hoja usas otros encabezados, ej: row.Columna1)
+                // Ajusta 'Fecha' y 'Cantidad' según los títulos de las columnas de tu Google Sheet
                 const labels = data.map(row => row.Fecha || 'Sin Fecha');
                 const valores = data.map(row => Number(row.Cantidad) || 0);
 
                 const ctx = document.getElementById('asistenciasChart').getContext('2d');
                 
                 new Chart(ctx, {
-                    type: 'bar', // Puedes cambiar a 'line', 'pie', 'doughnut', etc.
+                    type: 'bar',
                     data: {
                         labels: labels,
                         datasets: [{
@@ -107,7 +116,7 @@
                             y: {
                                 beginAtZero: true,
                                 ticks: {
-                                    precision: 0 // Evita decimales si las asistencias son números enteros
+                                    precision: 0
                                 }
                             }
                         }
@@ -115,13 +124,12 @@
                 });
 
             } catch (error) {
-                console.error("Error al conectar con la API de Google Apps Script:", error);
-                document.getElementById('loadingMessage').innerText = "Error al cargar los datos. Revisa la consola.";
+                console.error("Error detallado:", error);
+                document.getElementById('loadingMessageinnerHTML').innerText = "Error al conectar con Google Sheets. Revisa que el script tenga permisos públicos.";
                 document.getElementById('loadingMessage').style.color = "#e74c3c";
             }
         }
 
-        // Ejecutar la función al cargar la página
         cargarDatosYCrearGrafico();
     </script>
 
