@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard de Asistencias - BI</title>
-    <!-- Cargamos la librería Chart.js desde un CDN -->
+    <title>Dashboard de Maquinaria - BI</title>
+    <!-- Cargamos Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -18,7 +18,7 @@
             align-items: center;
         }
         header {
-            margin-bottom: 25px;
+            margin-bottom: 20px;
             text-align: center;
         }
         h1 {
@@ -29,20 +29,76 @@
             color: #7f8c8d;
             font-size: 0.95rem;
         }
-        .chart-container {
-            width: 100%;
-            max-width: 800px;
+        /* Panel de Filtros */
+        .filter-panel {
             background: #ffffff;
-            padding: 25px;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.05);
+            margin-bottom: 25px;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            font-size: 0.85rem;
+            color: #555;
+        }
+        .filter-group input {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            margin-top: 4px;
+            font-size: 0.9rem;
+        }
+        .filter-btn {
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-top: 16px;
+        }
+        .filter-btn:hover {
+            background-color: #1f618d;
+        }
+        /* Contenedores de Gráficos */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .chart-card {
+            background: #ffffff;
+            padding: 20px;
             border-radius: 12px;
             box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.08);
-            margin-bottom: 20px;
+        }
+        .chart-card h3 {
+            margin-top: 0;
+            color: #34495e;
+            font-size: 1.1rem;
+            text-align: center;
         }
         .loading {
-            font-size: 1.1rem;
+            font-size: 1.2rem;
             color: #2980b9;
             font-weight: bold;
-            margin-top: 20px;
+            margin-top: 40px;
             text-align: center;
         }
     </style>
@@ -50,87 +106,173 @@
 <body>
 
     <header>
-        <h1>Panel de Control de Asistencias</h1>
-        <p class="subtitle">Datos sincronizados en tiempo real desde Google Sheets</p>
+        <h1>Panel de Control - Consorcio Vial BAAS</h1>
+        <p class="subtitle">Monitoreo de Horas de Maquinaria en Tiempo Real</p>
     </header>
 
-    <div class="chart-container">
-        <div id="loadingMessage" class="loading">Cargando datos desde Google Sheets...</div>
-        <canvas id="asistenciasChart"></canvas>
+    <!-- Filtros de Fecha -->
+    <div class="filter-panel">
+        <div class="filter-group">
+            <label for="startDate">Fecha Inicio:</label>
+            <input type="date" id="startDate">
+        </div>
+        <div class="filter-group">
+            <label for="endDate">Fecha Fin:</label>
+            <input type="date" id="endDate">
+        </div>
+        <button class="filter-btn" onclick="aplicarFiltros()">Filtrar Reporte</button>
+    </div>
+
+    <div id="loadingMessage" class="loading">Cargando registros de maquinaria...</div>
+
+    <!-- Grilla de Gráficos -->
+    <div class="charts-grid" id="dashboardContent" style="display: none;">
+        <div class="chart-card">
+            <h3>Evolución de Horas Totales por Fecha</h3>
+            <canvas id="lineChart"></canvas>
+        </div>
+        <div class="chart-card">
+            <h3>Horas Trabajadas por Equipo</h3>
+            <canvas id="barChart"></canvas>
+        </div>
     </div>
 
     <script>
-        // Tu URL exacta generada por Google Apps Script
         const urlAPI = 'https://script.google.com/macros/s/AKfycbzqYSYO6YLgy6BHwx4EjoSv0AQcvBZmyLmT_pEsxFIRn7GWGlmIO_DbQw8Fe0thjlnD/exec';
+        
+        let rawData = [];
+        let lineChartInstance = null;
+        let barChartInstance = null;
 
-        async function cargarDatosYCrearGrafico() {
+        async function initDashboard() {
             try {
-                // Usamos mode: 'cors' explícitamente
-                const response = await fetch(urlAPI, {
-                    method: 'GET',
-                    mode: 'cors'
-                });
+                const response = await fetch(urlAPI, { method: 'GET', mode: 'cors' });
+                if (!response.ok) throw new Error('Error al conectar con la API');
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                // Ocultamos el mensaje de carga
+                rawData = await response.json();
+                
                 document.getElementById('loadingMessage').style.display = 'none';
+                document.getElementById('dashboardContent').style.display = 'grid';
 
-                if (!data || data.length === 0) {
-                    document.getElementById('loadingMessage').innerText = "La hoja de cálculo está vacía o no tiene registros.";
+                if (!rawData || rawData.length === 0) {
+                    document.getElementById('loadingMessage').innerText = "La hoja de cálculo no contiene datos.";
                     document.getElementById('loadingMessage').style.display = 'block';
                     return;
                 }
 
-                // Ajusta 'Fecha' y 'Cantidad' según los títulos de las columnas de tu Google Sheet
-                const labels = data.map(row => row.Fecha || 'Sin Fecha');
-                const valores = data.map(row => Number(row.Cantidad) || 0);
-
-                const ctx = document.getElementById('asistenciasChart').getContext('2d');
-                
-                new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Asistencia Registrada',
-                            data: valores,
-                            backgroundColor: 'rgba(52, 152, 219, 0.7)',
-                            borderColor: 'rgba(41, 128, 185, 1)',
-                            borderWidth: 1.5,
-                            borderRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: {
-                                position: 'top',
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    precision: 0
-                                }
-                            }
-                        }
-                    }
-                });
+                renderCharts(rawData);
 
             } catch (error) {
-                console.error("Error detallado:", error);
-                document.getElementById('loadingMessageinnerHTML').innerText = "Error al conectar con Google Sheets. Revisa que el script tenga permisos públicos.";
+                console.error("Error:", error);
+                document.getElementById('loadingMessage').innerText = "Error al conectar con Google Sheets.";
                 document.getElementById('loadingMessage').style.color = "#e74c3c";
             }
         }
 
-        cargarDatosYCrearGrafico();
+        function renderCharts(dataToRender) {
+            // Agrupamientos basados en tus columnas exactas: FECHA, TOTAL, EQUIPO
+            const horasPorFecha = {};
+            const horasPorEquipo = {};
+
+            dataToRender.forEach(row => {
+                let fecha = row.FECHA ? String(row.FECHA).substring(0, 10) : 'Sin Fecha';
+                let totalHoras = Number(row.TOTAL) || 0;
+                let equipo = row.EQUIPO ? String(row.EQUIPO) : 'Sin Equipo';
+
+                // Sumar por Fecha
+                if (horasPorFecha[fecha]) {
+                    horasPorFecha[fecha] += totalHoras;
+                } else {
+                    horasPorFecha[fecha] = totalHoras;
+                }
+
+                // Sumar por Equipo
+                if (horasPorEquipo[equipo]) {
+                    horasPorEquipo[equipo] += totalHoras;
+                } else {
+                    horasPorEquipo[equipo] = totalHoras;
+                }
+            });
+
+            const labelsFecha = Object.keys(horasPorFecha);
+            const valuesFecha = Object.values(horasPorFecha);
+
+            const labelsEquipo = Object.keys(horasPorEquipo);
+            const valuesEquipo = Object.values(horasPorEquipo);
+
+            // Destruir gráficos previos si existen
+            if (lineChartInstance) lineChartInstance.destroy();
+            if (barChartInstance) barChartInstance.destroy();
+
+            // 1. Gráfico de Líneas (Horas por Fecha)
+            const ctxLine = document.getElementById('lineChart').getContext('2d');
+            lineChartInstance = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: labelsFecha,
+                    datasets: [{
+                        label: 'Total de Horas',
+                        data: valuesFecha,
+                        borderColor: '#2980b9',
+                        backgroundColor: 'rgba(41, 128, 185, 0.1)',
+                        borderWidth: 2.5,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, scales: { y: { beginAtZero: true } } }
+            });
+
+            // 2. Gráfico de Barras (Horas por Equipo)
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            barChartInstance = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: labelsEquipo,
+                    datasets: [{
+                        label: 'Horas Acumuladas',
+                        data: valuesEquipo,
+                        backgroundColor: '#27ae60',
+                        borderWidth: 1,
+                        borderRadius: 5
+                    }]
+                },
+                options: { 
+                    responsive: true,
+                    scales: { 
+                        y: { beginAtZero: true },
+                        x: {
+                            ticks: {
+                                font: { size: 10 }
+                            }
+                        }
+                    } 
+                }
+            });
+        }
+
+        function aplicarFiltros() {
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            if (!startDate && !endDate) {
+                renderCharts(rawData);
+                return;
+            }
+
+            const filteredData = rawData.filter(row => {
+                let fechaRow = row.FECHA ? String(row.FECHA).substring(0, 10) : '';
+                if (!fechaRow) return false;
+
+                if (startDate && fechaRow < startDate) return false;
+                if (endDate && fechaRow > endDate) return false;
+                return true;
+            });
+
+            renderCharts(filteredData);
+        }
+
+        initDashboard();
     </script>
 
 </body>
