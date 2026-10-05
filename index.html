@@ -69,6 +69,20 @@
         .filter-btn:hover {
             background-color: #1f618d;
         }
+        .reset-btn {
+            background-color: #7f8c8d;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+            margin-top: 16px;
+        }
+        .reset-btn:hover {
+            background-color: #616a6b;
+        }
         /* Contenedores de Gráficos */
         .charts-grid {
             display: grid;
@@ -107,7 +121,7 @@
 
     <header>
         <h1>Panel de Control - Consorcio Vial BAAS</h1>
-        <p class="subtitle">Monitoreo de Horas de Maquinaria en Tiempo Real</p>
+        <p class="subtitle">Monitoreo inteligente de horas de maquinaria</p>
     </header>
 
     <!-- Filtros de Fecha -->
@@ -121,6 +135,7 @@
             <input type="date" id="endDate">
         </div>
         <button class="filter-btn" onclick="aplicarFiltros()">Filtrar Reporte</button>
+        <button class="reset-btn" onclick="limpiarFiltros()">Ver Todo</button>
     </div>
 
     <div id="loadingMessage" class="loading">Cargando registros de maquinaria...</div>
@@ -169,21 +184,53 @@
             }
         }
 
+        // Función auxiliar para convertir cualquier formato de fecha a YYYY-MM-DD para poder comparar
+        function normalizarFecha(fechaStr) {
+            if (!fechaStr) return null;
+            let str = String(fechaStr).trim();
+
+            // Si viene en formato ISO de Google (ej: 2026-10-01T00:00:00.000Z)
+            if (str.includes('T')) {
+                return str.substring(0, 10);
+            }
+
+            // Si viene en formato D/M/YYYY o D/M/YY (ej: 1/10/26 o 01/10/2026)
+            if (str.includes('/')) {
+                let partes = str.split('/');
+                if (partes.length === 3) {
+                    let dia = partes[0].padStart(2, '0');
+                    let mes = partes[1].padStart(2, '0');
+                    let anio = partes[2];
+                    if (anio.length === 2) {
+                        anio = '20' + anio; // Asume años 2000+
+                    }
+                    return `${anio}-${mes}-${dia}`;
+                }
+            }
+
+            // Si ya está como YYYY-MM-DD
+            if (str.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return str;
+            }
+
+            return null;
+        }
+
         function renderCharts(dataToRender) {
-            // Agrupamientos basados en tus columnas exactas: FECHA, TOTAL, EQUIPO
             const horasPorFecha = {};
             const horasPorEquipo = {};
 
             dataToRender.forEach(row => {
-                let fecha = row.FECHA ? String(row.FECHA).substring(0, 10) : 'Sin Fecha';
+                let fechaNormalizada = normalizarFecha(row.FECHA);
+                let fechaLabel = fechaNormalizada || 'Sin Fecha';
                 let totalHoras = Number(row.TOTAL) || 0;
                 let equipo = row.EQUIPO ? String(row.EQUIPO) : 'Sin Equipo';
 
                 // Sumar por Fecha
-                if (horasPorFecha[fecha]) {
-                    horasPorFecha[fecha] += totalHoras;
+                if (horasPorFecha[fechaLabel]) {
+                    horasPorFecha[fechaLabel] += totalHoras;
                 } else {
-                    horasPorFecha[fecha] = totalHoras;
+                    horasPorFecha[fechaLabel] = totalHoras;
                 }
 
                 // Sumar por Equipo
@@ -200,11 +247,10 @@
             const labelsEquipo = Object.keys(horasPorEquipo);
             const valuesEquipo = Object.values(horasPorEquipo);
 
-            // Destruir gráficos previos si existen
             if (lineChartInstance) lineChartInstance.destroy();
             if (barChartInstance) barChartInstance.destroy();
 
-            // 1. Gráfico de Líneas (Horas por Fecha)
+            // 1. Gráfico de Líneas
             const ctxLine = document.getElementById('lineChart').getContext('2d');
             lineChartInstance = new Chart(ctxLine, {
                 type: 'line',
@@ -223,7 +269,7 @@
                 options: { responsive: true, scales: { y: { beginAtZero: true } } }
             });
 
-            // 2. Gráfico de Barras (Horas por Equipo)
+            // 2. Gráfico de Barras
             const ctxBar = document.getElementById('barChart').getContext('2d');
             barChartInstance = new Chart(ctxBar, {
                 type: 'bar',
@@ -241,11 +287,7 @@
                     responsive: true,
                     scales: { 
                         y: { beginAtZero: true },
-                        x: {
-                            ticks: {
-                                font: { size: 10 }
-                            }
-                        }
+                        x: { ticks: { font: { size: 10 } } }
                     } 
                 }
             });
@@ -261,7 +303,7 @@
             }
 
             const filteredData = rawData.filter(row => {
-                let fechaRow = row.FECHA ? String(row.FECHA).substring(0, 10) : '';
+                let fechaRow = normalizarFecha(row.FECHA);
                 if (!fechaRow) return false;
 
                 if (startDate && fechaRow < startDate) return false;
@@ -270,6 +312,12 @@
             });
 
             renderCharts(filteredData);
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('startDate').value = '';
+            document.getElementById('endDate').value = '';
+            renderCharts(rawData);
         }
 
         initDashboard();
