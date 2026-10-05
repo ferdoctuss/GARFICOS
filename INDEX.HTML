@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Asistencias - BI</title>
+    <!-- Cargamos la librería Chart.js desde un CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        header {
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        p.subtitle {
+            color: #7f8c8d;
+            font-size: 0.95rem;
+        }
+        .chart-container {
+            width: 100%;
+            max-width: 800px;
+            background: #ffffff;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+        .loading {
+            font-size: 1.1rem;
+            color: #2980b9;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Panel de Control de Asistencias</h1>
+        <p class="subtitle">Datos sincronizados en tiempo real desde Google Sheets</p>
+    </header>
+
+    <div class="chart-container">
+        <div id="loadingMessage" class="loading">Cargando datos desde Google Sheets...</div>
+        <canvas id="asistenciasChart"></canvas>
+    </div>
+
+    <script>
+        // Tu URL exacta generada por Google Apps Script
+        const urlAPI = 'https://script.google.com/macros/s/AKfycbzqYSYO6YLgy6BHwx4EjoSv0AQcvBZmyLmT_pEsxFIRn7GWGlmIO_DbQw8Fe0thjlnD/exec';
+
+        async function cargarDatosYCrearGrafico() {
+            try {
+                const response = await fetch(urlAPI);
+                const data = await response.json();
+
+                // Ocultamos el mensaje de carga una vez obtenidos los datos
+                document.getElementById('loadingMessage').style.display = 'none';
+
+                // Verificamos que lleguen datos
+                if (!data || data.length === 0) {
+                    alert("No se encontraron registros en la hoja de cálculo.");
+                    return;
+                }
+
+                // NOTA: Asegúrate de que las columnas en tu Google Sheet se llamen exactamente "Fecha" y "Cantidad"
+                // (puedes cambiar los nombres aquí si en tu hoja usas otros encabezados, ej: row.Columna1)
+                const labels = data.map(row => row.Fecha || 'Sin Fecha');
+                const valores = data.map(row => Number(row.Cantidad) || 0);
+
+                const ctx = document.getElementById('asistenciasChart').getContext('2d');
+                
+                new Chart(ctx, {
+                    type: 'bar', // Puedes cambiar a 'line', 'pie', 'doughnut', etc.
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Asistencia Registrada',
+                            data: valores,
+                            backgroundColor: 'rgba(52, 152, 219, 0.7)',
+                            borderColor: 'rgba(41, 128, 185, 1)',
+                            borderWidth: 1.5,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    precision: 0 // Evita decimales si las asistencias son números enteros
+                                }
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al conectar con la API de Google Apps Script:", error);
+                document.getElementById('loadingMessage').innerText = "Error al cargar los datos. Revisa la consola.";
+                document.getElementById('loadingMessage').style.color = "#e74c3c";
+            }
+        }
+
+        // Ejecutar la función al cargar la página
+        cargarDatosYCrearGrafico();
+    </script>
+
+</body>
+</html>
